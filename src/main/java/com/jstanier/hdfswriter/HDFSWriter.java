@@ -22,8 +22,6 @@ public class HDFSWriter {
 
     private static final Logger LOG = LoggerFactory.getLogger(HDFSWriter.class);
 
-    public static final int FLUSH_SIZE = 100;
-
     @Autowired
     private Environment environment;
 
@@ -39,12 +37,22 @@ public class HDFSWriter {
     private FSDataOutputStream outputStream;
     private ExecutorService pool = Executors.newSingleThreadExecutor();
     private int flushBatchSize = 0;
+    private int flushSize;
+
+    @PostConstruct
+    public void initialise() {
+        flushSize = Integer.parseInt(environment.getProperty("flush.size"));
+    }
 
     @PostConstruct
     public void createOutputStream() throws IOException {
-        Path path = new Path(environment.getProperty("output.path"));
+        Path path = createPath();
         deleteIfExists(path);
         beginWriting(path);
+    }
+
+    protected Path createPath() {
+        return new Path(environment.getProperty("output.path"));
     }
 
     private void deleteIfExists(Path path) throws IOException {
@@ -67,7 +75,7 @@ public class HDFSWriter {
     }
 
     private void flushWritesIfNeeded() throws IOException {
-        if (flushBatchSize == FLUSH_SIZE) {
+        if (flushBatchSize == flushSize) {
             outputStream.hflush();
             flushBatchSize = 0;
         }
@@ -75,9 +83,13 @@ public class HDFSWriter {
 
     @PreDestroy
     public void close() throws IOException {
-        outputStream.flush();
+        outputStream.hflush();
         outputStream.close();
         pool.shutdown();
         fileSystem.close();
+    }
+
+    public int getFlushSize() {
+        return flushSize;
     }
 }

@@ -2,28 +2,36 @@ package com.jstanier.hdfswriter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public class WriteRecorder {
 
-    private static final Logger LOG = LoggerFactory.getLogger(WriteRecorder.class);
+    @Autowired
+    private HDFSWriter hdfsWriter;
 
-    private long writes = 0;
+    private final Logger log = LoggerFactory.getLogger(WriteRecorder.class);
+
+    private Long writes = 0L;
 
     public void recordWrite() {
-        writes++;
+        incrementWrites();
         printMessageIfNecessary();
     }
 
+    protected void incrementWrites() {
+        writes++;
+    }
+
     private void printMessageIfNecessary() {
-        if (writes % HDFSWriter.FLUSH_SIZE == 0) {
+        if (writes % hdfsWriter.getFlushSize() == 0) {
             printWrites();
         }
     }
 
     public void printWrites() {
-        LOG.info("Wrote " + writes + " messages");
+        log.info("Wrote " + writes + " message(s)");
     }
 
 }

@@ -14,7 +14,7 @@ import com.brandwatch.kafka.consumer.StreamIterator;
 @Scope("prototype")
 final class StreamConsumer implements Runnable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(StreamConsumer.class);
+    private final Logger log = LoggerFactory.getLogger(StreamConsumer.class);
 
     @Autowired
     private StreamIterator<String, String> streamIterator;
@@ -30,7 +30,7 @@ final class StreamConsumer implements Runnable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (IOException e) {
-            LOG.error("IOException when writing to HDFS.", e);
+            log.error("IOException when writing to HDFS.", e);
         }
     }
 }
