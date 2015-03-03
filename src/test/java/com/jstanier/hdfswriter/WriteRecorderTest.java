@@ -42,4 +42,21 @@ public class WriteRecorderTest {
         Mockito.verify(writeRecorder).incrementWrites();
         Mockito.verify(log).info("Wrote 1 message(s)");
     }
+
+    @Test
+    public void givenNoMessagesWritten_onClose_ZeroTotalWritesArePrinted() {
+        Mockito.when(hdfsWriter.getFlushSize()).thenReturn(100);
+        writeRecorder.close();
+        Mockito.verify(log).info("Wrote 0 message(s)");
+    }
+
+    @Test
+    public void givenSomeMessagesWritten_onClose_ZeroTotalWritesArePrinted() {
+        Mockito.when(hdfsWriter.getFlushSize()).thenReturn(100);
+        for (int i = 0; i < 10; i++) {
+            writeRecorder.recordWrite();
+        }
+        writeRecorder.close();
+        Mockito.verify(log).info("Wrote 10 message(s)");
+    }
 }
