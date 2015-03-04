@@ -1,6 +1,7 @@
 package com.jstanier.hdfswriter;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -16,6 +17,8 @@ import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+
+import com.google.common.base.Splitter;
 
 @Component
 public class HDFSWriter {
@@ -34,25 +37,39 @@ public class HDFSWriter {
     @Autowired
     private WriteRecorder writeRecorder;
 
+    @Autowired
+    private PathCreator pathCreator;
+
+    @Autowired
+    private PathRotator pathRotator;
+
     private FSDataOutputStream outputStream;
     private ExecutorService pool = Executors.newSingleThreadExecutor();
     private int flushBatchSize = 0;
     private int flushSize;
+    private int currentMessages = 0;
+    private int maximumMessagesInFile;
+    private Path currentPath;
 
     @PostConstruct
-    public void initialise() {
+    public void initialise() throws IOException {
         flushSize = Integer.parseInt(environment.getProperty("flush.size"));
+        maximumMessagesInFile = Integer.parseInt(environment.getProperty("messages.per.file"));
+        currentPath = pathCreator.createNewPath(environment.getProperty("output.path"));
+        deleteIfExists(currentPath);
     }
 
     @PostConstruct
-    public void createOutputStream() throws IOException {
-        Path path = createPath();
-        deleteIfExists(path);
-        beginWriting(path);
+    public void startWriting() throws IOException {
+        beginWriting(currentPath);
     }
 
-    protected Path createPath() {
-        return new Path(environment.getProperty("output.path"));
+    private void rotateFile() throws IllegalArgumentException, Exception {
+        outputStream.hflush();
+        Path rotatedPath = pathRotator.rotatePath(currentPath);
+        outputStream = fileSystem.create(rotatedPath);
+        currentMessages = 0;
+        currentPath = rotatedPath;
     }
 
     private void deleteIfExists(Path path) throws IOException {
@@ -68,10 +85,30 @@ public class HDFSWriter {
     }
 
     public void write(String message) throws IOException {
-        outputStream.writeUTF(message + "\n");
+        writeMessageInChunks(message);
         flushBatchSize++;
+        try {
+            possiblyRotateFile();
+        } catch (Exception e) {
+            close();
+        }
         writeRecorder.recordWrite();
         flushWritesIfNeeded();
+    }
+
+    private void writeMessageInChunks(String message) throws IOException {
+        Iterator<String> chunks = Splitter.fixedLength(100).split(message).iterator();
+        while (chunks.hasNext()) {
+            outputStream.writeUTF(chunks.next());
+        }
+        outputStream.writeUTF("\n");
+    }
+
+    private void possiblyRotateFile() throws Exception {
+        currentMessages++;
+        if (currentMessages == maximumMessagesInFile) {
+            rotateFile();
+        }
     }
 
     private void flushWritesIfNeeded() throws IOException {

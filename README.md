@@ -15,6 +15,7 @@ Given a Kafka topic, the program will stream it into HDFS at the filename given.
 --core.site.xml      e.g. /Users/me/libraries/hadoop-2.6.0/etc/hadoop/core-site.xml
 --kafka.topic        e.g. query.mentions
 --flush.size         e.g. 100
+--messages.per.file  e.g. 10000
 ```
 
 

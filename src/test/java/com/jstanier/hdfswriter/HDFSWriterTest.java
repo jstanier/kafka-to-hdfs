@@ -6,12 +6,11 @@ import java.util.concurrent.ExecutorService;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.core.env.Environment;
@@ -38,62 +37,64 @@ public class HDFSWriterTest {
     private ExecutorService pool;
 
     @Mock
-    private Path path;
+    private PathCreator pathCreator;
 
+    @Mock
+    private PathRotator pathRotator;
+
+    @InjectMocks
     private HDFSWriter hdfsWriter;
 
-    @Before
-    public void setup() {
-        hdfsWriter = Mockito.spy(HDFSWriter.class);
-        Whitebox.setInternalState(hdfsWriter, "outputStream", outputStream);
-        Whitebox.setInternalState(hdfsWriter, "pool", pool);
-        Whitebox.setInternalState(hdfsWriter, "environment", environment);
-        Whitebox.setInternalState(hdfsWriter, "fileSystem", fileSystem);
-        Whitebox.setInternalState(hdfsWriter, "streamConsumerFactory", streamConsumerFactory);
-        Whitebox.setInternalState(hdfsWriter, "writeRecorder", writeRecorder);
-    }
+    @Mock
+    private Path path;
 
     @Test
-    public void whenPathExists_createOutputStream_DeletesPathBeforeCreating() throws IOException {
+    public void whenPathExists_initialise_DeletesPathBeforeCreating() throws IOException {
+        Mockito.when(environment.getProperty("flush.size")).thenReturn("100");
+        Mockito.when(environment.getProperty("messages.per.file")).thenReturn("5");
         Mockito.when(environment.getProperty("output.path")).thenReturn("exampleFile.txt");
+        Mockito.when(pathCreator.createNewPath("exampleFile.txt")).thenReturn(path);
         Mockito.when(fileSystem.exists(path)).thenReturn(true);
-        Mockito.doReturn(path).when(hdfsWriter).createPath();
-        hdfsWriter.createOutputStream();
+        hdfsWriter.initialise();
+        hdfsWriter.startWriting();
         Mockito.verify(fileSystem).delete(path, true);
         Mockito.verify(fileSystem).create(path);
     }
 
     @Test
-    public void whenPathDoesNotExist_createOutputStream_DoesNotDeletePath() throws IOException {
+    public void whenPathDoesNotExist_initialise_DoesNotDeletePath() throws IOException {
+        Mockito.when(environment.getProperty("flush.size")).thenReturn("100");
+        Mockito.when(environment.getProperty("messages.per.file")).thenReturn("5");
         Mockito.when(environment.getProperty("output.path")).thenReturn("exampleFile.txt");
         Mockito.when(fileSystem.exists(path)).thenReturn(false);
-        Mockito.doReturn(path).when(hdfsWriter).createPath();
-        hdfsWriter.createOutputStream();
+        Mockito.when(pathCreator.createNewPath("exampleFile.txt")).thenReturn(path);
+        hdfsWriter.initialise();
+        hdfsWriter.startWriting();
         Mockito.verify(fileSystem).create(path);
         Mockito.verify(fileSystem, Mockito.never()).delete(path, true);
     }
 
     @Test
     public void whenBatchSizeReachesFlushSize_write_FlushesBatch() throws IOException {
+        Mockito.when(environment.getProperty("messages.per.file")).thenReturn("100");
         Mockito.when(environment.getProperty("flush.size")).thenReturn("1");
-        hdfsWriter.initialise();
         Mockito.when(environment.getProperty("output.path")).thenReturn("exampleFile.txt");
+        Mockito.when(pathCreator.createNewPath("exampleFile.txt")).thenReturn(path);
         Mockito.when(fileSystem.exists(path)).thenReturn(false);
-        Mockito.doReturn(path).when(hdfsWriter).createPath();
+        hdfsWriter.initialise();
         hdfsWriter.write("Hello!");
-        Mockito.verify(outputStream).writeUTF("Hello!\n");
         Mockito.verify(outputStream).hflush();
     }
 
     @Test
     public void whenBatchSizeIsLessThanFlushSize_write_DoesNotFlushBatch() throws IOException {
+        Mockito.when(environment.getProperty("messages.per.file")).thenReturn("5");
         Mockito.when(environment.getProperty("flush.size")).thenReturn("100");
-        hdfsWriter.initialise();
         Mockito.when(environment.getProperty("output.path")).thenReturn("exampleFile.txt");
+        Mockito.when(pathCreator.createNewPath("exampleFile.txt")).thenReturn(path);
         Mockito.when(fileSystem.exists(path)).thenReturn(false);
-        Mockito.doReturn(path).when(hdfsWriter).createPath();
+        hdfsWriter.initialise();
         hdfsWriter.write("Hello!");
-        Mockito.verify(outputStream).writeUTF("Hello!\n");
         Mockito.verify(outputStream, Mockito.never()).hflush();
     }
 
@@ -109,6 +110,44 @@ public class HDFSWriterTest {
     @Test
     public void write_writesMessageWithNewLine() throws IOException {
         hdfsWriter.write("Hello!");
-        Mockito.verify(outputStream).writeUTF("Hello!\n");
+        Mockito.verify(outputStream).writeUTF("Hello!");
+        Mockito.verify(outputStream).writeUTF("\n");
+    }
+
+    @Test
+    public void givenMaximumMessagesInFileIsReached_write_rotatesTheFile()
+            throws IllegalArgumentException, Exception {
+        Mockito.when(environment.getProperty("flush.size")).thenReturn("100");
+        Mockito.when(environment.getProperty("messages.per.file")).thenReturn("5");
+        Mockito.when(environment.getProperty("output.path")).thenReturn("exampleFile.txt");
+        Mockito.when(pathCreator.createNewPath("exampleFile.txt")).thenReturn(path);
+        hdfsWriter.initialise();
+        Mockito.when(fileSystem.exists(path)).thenReturn(false);
+        Path rotatedPath = Mockito.mock(Path.class);
+        Mockito.when(pathRotator.rotatePath(path)).thenReturn(rotatedPath);
+        FSDataOutputStream rotatedOutputStream = Mockito.mock(FSDataOutputStream.class);
+        Mockito.when(fileSystem.create(rotatedPath)).thenReturn(rotatedOutputStream);
+
+        for (int i = 0; i < 6; i++) {
+            hdfsWriter.write("Hello!");
+        }
+
+        Mockito.verify(outputStream).hflush();
+        Mockito.verify(fileSystem).create(rotatedPath);
+    }
+
+    @Test
+    public void givenMaximumMessagesInFileIsNotReached_write_doesNotRotateTheFile()
+            throws IllegalArgumentException, Exception {
+        Mockito.when(environment.getProperty("flush.size")).thenReturn("100");
+        Mockito.when(environment.getProperty("messages.per.file")).thenReturn("5");
+        Mockito.when(environment.getProperty("output.path")).thenReturn("exampleFile.txt");
+        Mockito.when(pathCreator.createNewPath("exampleFile.txt")).thenReturn(path);
+        hdfsWriter.initialise();
+        Mockito.when(fileSystem.exists(path)).thenReturn(false);
+        for (int i = 0; i < 4; i++) {
+            hdfsWriter.write("Hello!");
+        }
+        Mockito.verify(fileSystem, Mockito.never()).create(Mockito.any(Path.class));
     }
 }
