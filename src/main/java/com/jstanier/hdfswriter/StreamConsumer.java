@@ -2,33 +2,30 @@ package com.jstanier.hdfswriter;
 
 import java.io.IOException;
 
+import kafka.consumer.ConsumerIterator;
+import kafka.consumer.KafkaStream;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Scope;
-import org.springframework.stereotype.Component;
 
-import com.brandwatch.kafka.consumer.StreamIterator;
-
-@Component
-@Scope("prototype")
-final class StreamConsumer implements Runnable {
+public class StreamConsumer implements Runnable {
 
     private final Logger log = LoggerFactory.getLogger(StreamConsumer.class);
 
-    @Autowired
-    private StreamIterator<String, String> streamIterator;
-
-    @Autowired
     private HDFSWriter hdfsWriter;
+    private KafkaStream<byte[], byte[]> stream;
+
+    public StreamConsumer(HDFSWriter hdfsWriter, KafkaStream<byte[], byte[]> stream) {
+        this.hdfsWriter = hdfsWriter;
+        this.stream = stream;
+    }
 
     public void run() {
+        ConsumerIterator<byte[], byte[]> iterator = stream.iterator();
         try {
-            while (streamIterator.hasNext()) {
-                hdfsWriter.write(streamIterator.next().message());
+            while (iterator.hasNext()) {
+                hdfsWriter.write(iterator.next().message().toString());
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         } catch (IOException e) {
             log.error("IOException when writing to HDFS.", e);
         }

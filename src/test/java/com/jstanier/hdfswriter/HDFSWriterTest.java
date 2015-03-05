@@ -1,7 +1,13 @@
 package com.jstanier.hdfswriter;
 
 import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
+
+import kafka.consumer.KafkaStream;
+import kafka.javaapi.consumer.ConsumerConnector;
 
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -12,7 +18,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
-import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.core.env.Environment;
 
 @RunWith(MockitoJUnitRunner.class)
@@ -25,10 +30,13 @@ public class HDFSWriterTest {
     private FileSystem fileSystem;
 
     @Mock
-    private ObjectFactory<StreamConsumer> streamConsumerFactory;
+    private WriteRecorder writeRecorder;
 
     @Mock
-    private WriteRecorder writeRecorder;
+    private ConsumerConnector consumerConnector;
+
+    @Mock
+    private Iterator<KafkaStream<byte[], byte[]>> streamIterator;
 
     @Mock
     private FSDataOutputStream outputStream;
@@ -46,8 +54,15 @@ public class HDFSWriterTest {
     private HDFSWriter hdfsWriter;
 
     @Mock
+    private List<KafkaStream<byte[], byte[]>> kafkaStreams;
+
+    @Mock
+    private Map<String, List<KafkaStream<byte[], byte[]>>> topicsToStreams;
+
+    @Mock
     private Path path;
 
+    @SuppressWarnings("unchecked")
     @Test
     public void whenPathExists_initialise_DeletesPathBeforeCreating() throws IOException {
         Mockito.when(environment.getProperty("flush.size")).thenReturn("100");
@@ -55,12 +70,16 @@ public class HDFSWriterTest {
         Mockito.when(environment.getProperty("output.path")).thenReturn("exampleFile.txt");
         Mockito.when(pathCreator.createNewPath("exampleFile.txt")).thenReturn(path);
         Mockito.when(fileSystem.exists(path)).thenReturn(true);
+        Mockito.when(consumerConnector.createMessageStreams(Mockito.anyMap())).thenReturn(topicsToStreams);
+        Mockito.when(topicsToStreams.get(Mockito.any())).thenReturn(kafkaStreams);
+        Mockito.when(kafkaStreams.iterator()).thenReturn(streamIterator);
         hdfsWriter.initialise();
         hdfsWriter.startWriting();
         Mockito.verify(fileSystem).delete(path, true);
         Mockito.verify(fileSystem).create(path);
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void whenPathDoesNotExist_initialise_DoesNotDeletePath() throws IOException {
         Mockito.when(environment.getProperty("flush.size")).thenReturn("100");
@@ -68,6 +87,11 @@ public class HDFSWriterTest {
         Mockito.when(environment.getProperty("output.path")).thenReturn("exampleFile.txt");
         Mockito.when(fileSystem.exists(path)).thenReturn(false);
         Mockito.when(pathCreator.createNewPath("exampleFile.txt")).thenReturn(path);
+        Mockito.when(consumerConnector.createMessageStreams(Mockito.anyMap())).thenReturn(
+                topicsToStreams);
+        Mockito.when(topicsToStreams.get(Mockito.any())).thenReturn(kafkaStreams);
+        Mockito.when(kafkaStreams.iterator()).thenReturn(streamIterator);
+        Mockito.when(kafkaStreams.iterator()).thenReturn(streamIterator);
         hdfsWriter.initialise();
         hdfsWriter.startWriting();
         Mockito.verify(fileSystem).create(path);

@@ -2,23 +2,28 @@ package com.jstanier.hdfswriter;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
+import kafka.consumer.KafkaStream;
+import kafka.javaapi.consumer.ConsumerConnector;
+
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import com.google.common.base.Splitter;
+import com.google.common.collect.Maps;
 
 @Component
 public class HDFSWriter {
@@ -32,7 +37,7 @@ public class HDFSWriter {
     private FileSystem fileSystem;
 
     @Autowired
-    private ObjectFactory<StreamConsumer> streamConsumerFactory;
+    private ConsumerConnector consumerConnector;
 
     @Autowired
     private WriteRecorder writeRecorder;
@@ -50,13 +55,22 @@ public class HDFSWriter {
     private int currentMessages = 0;
     private int maximumMessagesInFile;
     private Path currentPath;
+    private List<KafkaStream<byte[], byte[]>> kafkaStreams;
 
     @PostConstruct
     public void initialise() throws IOException {
+        initialiseKafka();
         flushSize = Integer.parseInt(environment.getProperty("flush.size"));
         maximumMessagesInFile = Integer.parseInt(environment.getProperty("messages.per.file"));
         currentPath = pathCreator.createNewPath(environment.getProperty("output.path"));
         deleteIfExists(currentPath);
+    }
+
+    private void initialiseKafka() {
+        String topic = environment.getProperty("kafka.topic");
+        Map<String, Integer> topicsToThreads = Maps.newHashMap();
+        topicsToThreads.put(topic, 1);
+        kafkaStreams = consumerConnector.createMessageStreams(topicsToThreads).get(topic);
     }
 
     @PostConstruct
@@ -81,7 +95,9 @@ public class HDFSWriter {
     private void beginWriting(Path path) throws IOException {
         LOG.info("Writing...");
         outputStream = fileSystem.create(path);
-        pool.execute(streamConsumerFactory.getObject());
+        for (KafkaStream<byte[], byte[]> stream : kafkaStreams) {
+            pool.execute(new StreamConsumer(this, stream));
+        }
     }
 
     public void write(String message) throws IOException {

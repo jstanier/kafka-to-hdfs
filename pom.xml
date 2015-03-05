@@ -47,15 +47,15 @@
           <groupId>log4j</groupId>
         </exclusion>
         <exclusion>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>com.brandwatch</groupId>
-      <artifactId>kafka-tools</artifactId>
-      <version>0.2.5</version>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka_2.10</artifactId>
+      <version>0.8.1</version>
     </dependency>
   </dependencies>
 </project>

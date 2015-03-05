@@ -6,9 +6,9 @@ import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.Properties;
 
-import javax.annotation.PreDestroy;
-
-import kafka.serializer.StringDecoder;
+import kafka.consumer.Consumer;
+import kafka.consumer.ConsumerConfig;
+import kafka.javaapi.consumer.ConsumerConnector;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -18,17 +18,12 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
-import com.brandwatch.kafka.consumer.StreamFactory;
-import com.brandwatch.kafka.consumer.StreamIterator;
-
 @Configuration
 @ComponentScan
 public class Config {
 
     @Autowired
     private Environment environment;
-
-    private StreamFactory streamFactory;
 
     @Bean
     public FileSystem fileSystem() throws IOException, URISyntaxException {
@@ -39,18 +34,15 @@ public class Config {
     }
 
     @Bean
-    public StreamIterator<String, String> streamIterator() throws UnknownHostException {
-        Properties consumerProperties = new Properties();
-        consumerProperties.put("zookeeper.connect", environment.getProperty("zookeeper.host"));
-        consumerProperties.put("zookeeper.connectiontimeout.ms", "5000");
-        consumerProperties.put("group.id", InetAddress.getLocalHost().getHostName());
-        streamFactory = new StreamFactory(consumerProperties);
-        return streamFactory.createStream(environment.getProperty("kafka.topic"),
-                StringDecoder.class, StringDecoder.class);
-    }
+    public ConsumerConnector consumerConnector() throws UnknownHostException {
+        Properties properties = new Properties();
+        properties.put("zookeeper.connect", environment.getProperty("zookeeper.host"));
+        properties.put("zookeeper.connectiontimeout.ms", "5000");
+        properties.put("group.id", InetAddress.getLocalHost().getHostName());
+        properties.put("zookeeper.session.timeout.ms", "400");
+        properties.put("zookeeper.sync.time.ms", "200");
+        properties.put("auto.commit.interval.ms", "1000");
+        return Consumer.createJavaConsumerConnector(new ConsumerConfig(properties));
 
-    @PreDestroy
-    public void close() {
-        streamFactory.shutdown();
     }
 }

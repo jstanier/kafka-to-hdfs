@@ -2,46 +2,49 @@ package com.jstanier.hdfswriter;
 
 import java.io.IOException;
 
+import kafka.consumer.ConsumerIterator;
+import kafka.consumer.KafkaStream;
 import kafka.message.MessageAndMetadata;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.slf4j.Logger;
 
-import com.brandwatch.kafka.consumer.StreamIterator;
-
 @RunWith(MockitoJUnitRunner.class)
 public class StreamConsumerTest {
 
     @Mock
-    private StreamIterator<String, String> streamIterator;
-
-    @Mock
     private HDFSWriter hdfsWriter;
 
-    @InjectMocks
-    private StreamConsumer streamConsumer;
+    @Mock
+    private KafkaStream<byte[], byte[]> stream;
 
     @Mock
-    private MessageAndMetadata<String, String> message;
+    private MessageAndMetadata<byte[], byte[]> message;
 
     @Mock
     private Logger log;
 
+    @Mock
+    private ConsumerIterator<byte[], byte[]> iterator;
+
+    private StreamConsumer streamConsumer;
+
     @Before
     public void setup() {
+        streamConsumer = new StreamConsumer(hdfsWriter, stream);
         Whitebox.setInternalState(streamConsumer, "log", log);
     }
 
     @Test
     public void whenStreamIteratorDoesNotHaveNext_run_returns() throws InterruptedException {
-        Mockito.when(streamIterator.hasNext()).thenReturn(false);
+        Mockito.when(stream.iterator()).thenReturn(iterator);
+        Mockito.when(iterator.hasNext()).thenReturn(false);
         streamConsumer.run();
         Mockito.verifyNoMoreInteractions(hdfsWriter);
     }
@@ -49,21 +52,25 @@ public class StreamConsumerTest {
     @Test
     public void whenStreamIteratorHasNext_run_writesToHdfs() throws InterruptedException,
             IOException {
-        Mockito.when(streamIterator.hasNext()).thenReturn(true, false);
-        Mockito.when(message.message()).thenReturn("Hello!");
-        Mockito.when(streamIterator.next()).thenReturn(message);
+        Mockito.when(stream.iterator()).thenReturn(iterator);
+        Mockito.when(iterator.hasNext()).thenReturn(true, false);
+        Mockito.when(iterator.next()).thenReturn(message);
+        byte[] messageBytes = "Hello!".getBytes();
+        Mockito.when(message.message()).thenReturn(messageBytes);
         streamConsumer.run();
-        Mockito.verify(hdfsWriter).write("Hello!");
+        Mockito.verify(hdfsWriter).write(messageBytes.toString());
     }
 
     @Test
     public void whenHdfsWriterThrowsIOException_run_logsAnErrorThenReturnsWithoutThrowingAnException()
             throws InterruptedException, IOException {
-        Mockito.when(streamIterator.hasNext()).thenReturn(true);
-        Mockito.when(streamIterator.next()).thenReturn(message);
-        Mockito.when(message.message()).thenReturn("Hello!");
+        Mockito.when(stream.iterator()).thenReturn(iterator);
+        Mockito.when(iterator.hasNext()).thenReturn(true);
+        Mockito.when(iterator.next()).thenReturn(message);
+        byte[] messageBytes = "Hello!".getBytes();
+        Mockito.when(message.message()).thenReturn(messageBytes);
         try {
-            Mockito.doThrow(new IOException()).when(hdfsWriter).write("Hello!");
+            Mockito.doThrow(new IOException()).when(hdfsWriter).write(messageBytes.toString());
             streamConsumer.run();
         } catch (IOException e) {
             throw e;
