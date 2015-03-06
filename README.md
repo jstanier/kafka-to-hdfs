@@ -1,4 +1,4 @@
-# kafka-to-hdfs
+# kafka-to-hdfs [![Build Status](https://travis-ci.org/jstanier/kafka-to-hdfs.svg?branch=master)](https://travis-ci.org/jstanier/kafka-to-hdfs)
 Pipe the messages from a [Kafka](https://github.com/apache/kafka) topic into HDFS.
 
 ## Outline
