@@ -24,7 +24,7 @@ public class StreamConsumer implements Runnable {
         ConsumerIterator<byte[], byte[]> iterator = stream.iterator();
         try {
             while (iterator.hasNext()) {
-                hdfsWriter.write(iterator.next().message().toString());
+                hdfsWriter.write(new String(iterator.next().message()));
             }
         } catch (IOException e) {
             log.error("IOException when writing to HDFS.", e);

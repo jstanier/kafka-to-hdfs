@@ -58,7 +58,8 @@ public class StreamConsumerTest {
         byte[] messageBytes = "Hello!".getBytes();
         Mockito.when(message.message()).thenReturn(messageBytes);
         streamConsumer.run();
-        Mockito.verify(hdfsWriter).write(messageBytes.toString());
+        String convertedMessage = new String(messageBytes);
+        Mockito.verify(hdfsWriter).write(convertedMessage);
     }
 
     @Test
@@ -69,8 +70,9 @@ public class StreamConsumerTest {
         Mockito.when(iterator.next()).thenReturn(message);
         byte[] messageBytes = "Hello!".getBytes();
         Mockito.when(message.message()).thenReturn(messageBytes);
+        String convertedMessage = new String(messageBytes);
         try {
-            Mockito.doThrow(new IOException()).when(hdfsWriter).write(messageBytes.toString());
+            Mockito.doThrow(new IOException()).when(hdfsWriter).write(convertedMessage);
             streamConsumer.run();
         } catch (IOException e) {
             throw e;
